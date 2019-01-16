@@ -20,6 +20,7 @@ ANKI_MEDIA_PATH = 'C:\\Users\\maxgonzaga\\AppData\\Roaming\\Anki2\\maxgonzaga\\c
 
 # The function takes a word as argument and returns a triple with its definition in several versions
 def get_definition(word, soup):
+    # It tries to get friendly definition from Vocabulary.com
     try:
         short_definition = soup.find(class_='short')
         long_definition = soup.find(class_='long').get_text()
@@ -35,10 +36,10 @@ def get_definition(word, soup):
         hidden_word_string = ''.join(hidden_word)
         visible_word_string = ''.join(visible_word)
     except:
-        logging.info('Definitions weren\'t found.')
-        hidden_word_string = 'NOT FOUND!'
-        visible_word_string = 'NOT FOUND!'
-        long_definition = 'NOT FOUND!'
+        logging.info('There are no definitions in Vocabulary.com')
+        hidden_word_string = None
+        visible_word_string = None
+        long_definition = None
     return hidden_word_string, visible_word_string, long_definition
 
 def get_example(word, number, browser):
