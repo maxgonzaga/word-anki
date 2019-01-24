@@ -13,10 +13,49 @@ from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
 from bs4 import BeautifulSoup
 from google_images_download import google_images_download
+from pprint import pprint
 
-logging.basicConfig(filename='log.txt', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+#logging.basicConfig(filename='log.txt', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 ANKI_MEDIA_PATH = 'C:\\Users\\maxgonzaga\\AppData\\Roaming\\Anki2\\maxgonzaga\\collection.media'
+
+def add_tag(text, tag, id, class_):
+    if id != None and class_ == None:
+        html_text = '<' + tag + ' id=' + id + '>' + text + '</' + tag + '>'
+        return html_text
+    elif id ==None and class_ != None:
+        html_text = '<' + tag + ' class=' + class_ + '>' + text + '</' + tag + '>'
+        return html_text
+    else:
+        logging.info('Function add_tag only suports either id or tag, but not both.')
+        logging.info('Script is closing...')
+        sys.exit()
+    
+
+def oxford_definition(soup):
+    main_container = soup.find(class_='sn-gs')
+    groups_of_meanings = main_container.find_all(class_='shcut-g')
+    part_of_speech = soup.find('span', class_='pos').get_text()
+    logging.debug(part_of_speech)
+    for group in groups_of_meanings:
+        group_name = group.find(class_='shcut').get_text()
+        logging.debug('GROUP NAME: ' + group_name)
+        meanings = group.find_all(class_='sn-g')
+        list_of_definitions = []
+        list_of_examples = []
+        for meaning in meanings:
+            definition = meaning.find(class_='def').get_text()
+            list_of_definitions.append(definition)
+            logging.debug(definition)
+            try:
+                examples = meaning.find_all(class_='x')
+                for example in examples:
+                    list_of_examples.append(example.get_text())
+                logging.debug(list_of_examples)
+            except:
+                logging.debug('Examples weren\'t  found.')
+        print('\n\n')
 
 # The function takes a word as argument and returns a triple with its definition in several versions
 def get_definition(word, soup):
@@ -142,4 +181,7 @@ def main():
     t1 = time.time()
     print('Time: ' + str(round(t1 - t0, 0)) + ' seconds')
 
-main()
+if __name__ == "__main__":
+    oxford = download_page('https://www.oxfordlearnersdictionaries.com/definition/american_english/catch')
+    soup = BeautifulSoup(oxford, features='lxml')
+    oxford_definition(soup)
