@@ -35,27 +35,45 @@ def add_tag(text, tag, id, class_):
 
 def oxford_definition(soup):
     main_container = soup.find(class_='sn-gs')
-    groups_of_meanings = main_container.find_all(class_='shcut-g')
     part_of_speech = soup.find('span', class_='pos').get_text()
     logging.debug(part_of_speech)
-    for group in groups_of_meanings:
-        group_name = group.find(class_='shcut').get_text()
-        logging.debug('GROUP NAME: ' + group_name)
-        meanings = group.find_all(class_='sn-g')
-        list_of_definitions = []
+    groups_of_meanings = main_container.find_all(class_='shcut-g')
+    logging.debug(len(groups_of_meanings))
+    # word does not have groups
+    if len(groups_of_meanings) == 0:
+        meanings = main_container.find_all(class_='sn-g')
+        list_of_meanings = []
         list_of_examples = []
         for meaning in meanings:
-            definition = meaning.find(class_='def').get_text()
-            list_of_definitions.append(definition)
-            logging.debug(definition)
+            list_of_meanings.append(meaning.find(class_='def').get_text())
+            logging.debug(list_of_meanings[-1])
             try:
                 examples = meaning.find_all(class_='x')
                 for example in examples:
                     list_of_examples.append(example.get_text())
-                logging.debug(list_of_examples)
+                    logging.debug(list_of_examples[-1])
             except:
-                logging.debug('Examples weren\'t  found.')
-        print('\n\n')
+                logging.debug('Examples weren\'t found.')
+    # meanings are separeted in groups
+    else:
+        for group in groups_of_meanings:
+            group_name = group.find(class_='shcut').get_text()
+            logging.debug('GROUP NAME: ' + group_name)
+            meanings = group.find_all(class_='sn-g')
+            list_of_definitions = []
+            list_of_examples = []
+            for meaning in meanings:
+                definition = meaning.find(class_='def').get_text()
+                list_of_definitions.append(definition)
+                logging.debug(definition)
+                try:
+                    examples = meaning.find_all(class_='x')
+                    for example in examples:
+                        list_of_examples.append(example.get_text())
+                    logging.debug(list_of_examples)
+                except:
+                    logging.debug('Examples weren\'t  found.')
+            print('\n\n')
 
 # The function takes a word as argument and returns a triple with its definition in several versions
 def get_definition(word, soup):
@@ -182,6 +200,6 @@ def main():
     print('Time: ' + str(round(t1 - t0, 0)) + ' seconds')
 
 if __name__ == "__main__":
-    oxford = download_page('https://www.oxfordlearnersdictionaries.com/definition/american_english/catch')
+    oxford = download_page('https://www.oxfordlearnersdictionaries.com/definition/american_english/sworn')
     soup = BeautifulSoup(oxford, features='lxml')
     oxford_definition(soup)
