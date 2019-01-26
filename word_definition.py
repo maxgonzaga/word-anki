@@ -48,7 +48,8 @@ def oxford_definition(soup):
             list_of_meanings.append(meaning.find(class_='def').get_text())
             logging.debug(list_of_meanings[-1])
             try:
-                examples = meaning.find_all(class_='x')
+                examples_containter = meaning.find(class_='x-gs')
+                examples = examples_containter.find_all(class_='x')
                 for example in examples:
                     list_of_examples.append(example.get_text())
                     logging.debug(list_of_examples[-1])
@@ -200,6 +201,6 @@ def main():
     print('Time: ' + str(round(t1 - t0, 0)) + ' seconds')
 
 if __name__ == "__main__":
-    oxford = download_page('https://www.oxfordlearnersdictionaries.com/definition/american_english/sworn')
+    oxford = download_page('https://www.oxfordlearnersdictionaries.com/definition/american_english/walk')
     soup = BeautifulSoup(oxford, features='lxml')
     oxford_definition(soup)
