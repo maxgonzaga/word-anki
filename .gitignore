@@ -1,9 +1,7 @@
 *.log
 .vscode
-_pycache_
+__pycache__
 *.csv
 *.txt
 ..gitignore.un~
-__pycache__/test.cpython-37.pyc
-__pycache__/word_definition.cpython-37.pyc
 .gitignore~
