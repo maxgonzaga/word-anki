@@ -1,141 +1,92 @@
-#To be implemented
-#List wiht not found words
-#Get definitions from another dictionary when the word is not found
-#Try getting examples without openning headless browser
-#Thread for images downloading
-#add synonims
-
 import csv, time, shutil, sys, os, time, logging
 import urllib.request
 from urllib.request import Request, urlopen
 import requests
-from selenium import webdriver
-from selenium.webdriver.firefox.options import Options
 from bs4 import BeautifulSoup
 from google_images_download import google_images_download
-from pprint import pprint
-
-#logging.basicConfig(filename='log.txt', level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
 ANKI_MEDIA_PATH = 'C:\\Users\\maxgonzaga\\AppData\\Roaming\\Anki2\\maxgonzaga\\collection.media'
 
-def add_tag(text, tag, id, class_):
-    if id != None and class_ == None:
-        html_text = '<' + tag + ' id=' + id + '>' + text + '</' + tag + '>'
-        return html_text
-    elif id ==None and class_ != None:
-        html_text = '<' + tag + ' class=' + class_ + '>' + text + '</' + tag + '>'
-        return html_text
-    else:
-        logging.info('Function add_tag only suports either id or tag, but not both.')
-        logging.info('Script is closing...')
-        sys.exit()
-    
+def get_examples(examples_container):
+    list_of_examples = []
+    examples = examples_container.find_all(class_='x')
+    for example in examples:
+        list_of_examples.append(example.get_text())
+    for item in list_of_examples:
+        logging.info(' ' * 10 + item)
+    return list_of_examples
 
-def oxford_definition(soup):
-    main_container = soup.find(class_='sn-gs')
-    part_of_speech = soup.find('span', class_='pos').get_text()
-    logging.debug(part_of_speech)
-    groups_of_meanings = main_container.find_all(class_='shcut-g')
-    logging.debug(len(groups_of_meanings))
-    # word does not have groups
-    if len(groups_of_meanings) == 0:
-        meanings = main_container.find_all(class_='sn-g')
-        list_of_meanings = []
-        list_of_examples = []
-        for meaning in meanings:
-            list_of_meanings.append(meaning.find(class_='def').get_text())
-            logging.debug(list_of_meanings[-1])
+def get_meanings(meanings_container):
+    meanings = meanings_container.find_all(class_='sn-g')
+    list_of_meanings = []
+    list_of_examples = []
+    for meaning in meanings:
+        try:
+            definition = meaning.find(class_='def').get_text()
+            logging.info(definition)
             try:
-                examples_containter = meaning.find(class_='x-gs')
-                examples = examples_containter.find_all(class_='x')
-                for example in examples:
-                    list_of_examples.append(example.get_text())
-                    logging.debug(list_of_examples[-1])
+                examples_container = meaning.find(class_='x-gs')
+                list_of_examples = get_examples(examples_container)
+                list_of_meanings.append((definition, list_of_examples))
             except:
-                logging.debug('Examples weren\'t found.')
-    # meanings are separeted in groups
-    else:
-        for group in groups_of_meanings:
+                list_of_meanings.append((definition, []))
+        except:
+            continue
+    return list_of_meanings
+    
+def generate_notes(csv_object, page_source):
+    soup = BeautifulSoup(page_source, features='lxml')
+    word = soup.find('h2', class_='h').get_text()
+    transcription = get_audio_and_transcription(word, page_source)
+    audio = '[sound:' + word + '.mp3]'
+    image = ''
+    try:
+        get_image(word)
+        image = '<img>' + word + '</img>'
+    except:
+        image = ''
+        logging.info('Problem downloading image.')
+    part_of_speech = soup.find('span', class_='pos').get_text()
+    logging.info('Part of speech: ' + part_of_speech)
+    definitions_container = soup.find(class_='sn-gs')
+    groups_of_definitions = definitions_container.find_all(class_='shcut-g')
+    if len(groups_of_definitions) != 0:
+        for group in groups_of_definitions:
             group_name = group.find(class_='shcut').get_text()
-            logging.debug('GROUP NAME: ' + group_name)
-            meanings = group.find_all(class_='sn-g')
-            list_of_definitions = []
-            list_of_examples = []
-            for meaning in meanings:
-                definition = meaning.find(class_='def').get_text()
-                list_of_definitions.append(definition)
-                logging.debug(definition)
-                try:
-                    examples = meaning.find_all(class_='x')
-                    for example in examples:
-                        list_of_examples.append(example.get_text())
-                    logging.debug(list_of_examples)
-                except:
-                    logging.debug('Examples weren\'t  found.')
-            print('\n\n')
+            logging.info('Group: ' + group_name)
+            list_of_meanings = get_meanings(group)
+            write_to_file(csv_object, list_of_meanings, group_name, word, part_of_speech, transcription, audio, image)
+    else:
+        group_name = ''
+        list_of_meanings = get_meanings(definitions_container)
+        write_to_file(csv_object, list_of_meanings, group_name, word, part_of_speech, transcription, audio, image) 
 
-# The function takes a word as argument and returns a triple with its definition in several versions
-def get_definition(word, soup):
-    # It tries to get friendly definition from Vocabulary.com
-    try:
-        short_definition = soup.find(class_='short')
-        long_definition = soup.find(class_='long').get_text()
-        hidden_word = []
-        visible_word = []
-        for item in short_definition.contents:
-            if type(item) == type(short_definition):
-                hidden_word.append('[...]')
-                visible_word.append(item.string)
-            else:
-                visible_word.append(item.string)
-                hidden_word.append(item.string)
-        hidden_word_string = ''.join(hidden_word)
-        visible_word_string = ''.join(visible_word)
-    except:
-        logging.info('There are no definitions in Vocabulary.com')
-        hidden_word_string = None
-        visible_word_string = None
-        long_definition = None
-    return hidden_word_string, visible_word_string, long_definition
+def write_to_file(csv_object, list_of_meanings, group_name, word, part_of_speech, transcription, audio, image):
+    html_all_meanings = '<p class=\'group-name\'>' + group_name + '</p>'
+    for meaning, list_of_examples in list_of_meanings:
+        html_examples = []
+        for example in list_of_examples:
+            html_examples.append('<li>' + example + '</li>')
+        html_list_of_examples = '<ul class=\'examples\'>' + ''.join(html_examples) + '</ul>'
+        html_meaning = '<p class=\'def\'>' + meaning + '</p>' + html_list_of_examples
+        html_all_meanings = html_all_meanings + '<div class=\'meaning\'>' + html_meaning + '<div>'
+    csv_object.writerow([html_all_meanings, part_of_speech, word, transcription, audio, image])
 
-def get_example(word, number, browser):
-    browser.get('https://www.vocabulary.com/dictionary/' + word)
-    time.sleep(3)
-    soup = BeautifulSoup(browser.page_source, features='lxml')
-    list_examples = []
-    try:
-        tags = soup.find_all(class_='sentence', limit=number)
-        for example in tags:
-            list_examples.append(example.get_text())
-    except:
-        logging.info('Examples weren\'t found.')
-        for i in range(number):
-            list_examples.append('NOT FOUND!')
-    return list_examples
-
-# This function downloads first Google image result for word and stores it in Anki collection
 def get_image(word):
     response = google_images_download.googleimagesdownload()
-    arguments = {"keywords":word,"limit":1,"print_urls":True, "output_directory":ANKI_MEDIA_PATH, "no_directory":True, "format":"jpg"}
+    arguments = {"keywords":word,"limit":1,"print_urls":True, "output_directory":ANKI_MEDIA_PATH, "no_directory":True, "format":"jpg", "metadata":False}
     temporary_path = response.download(arguments)[word][0]
     print('Temporary path: ' + temporary_path)
     destination_path = os.path.join(ANKI_MEDIA_PATH, word + '.jpg')
     print('Destination path: ' + destination_path)
     shutil.move(temporary_path, destination_path)
 
-# The function takes a word as argument and returns its pronunciation in audio and its transcription
 def get_audio_and_transcription(word, page_source):
     soup = BeautifulSoup(page_source, features='lxml')
-    try:
-        audio_source = soup.find(attrs={'title':' pronunciation American'}).attrs['data-src-mp3']
-        urllib.request.urlretrieve(audio_source, os.path.join(ANKI_MEDIA_PATH, word + '.mp3'))
-        transcription = str(soup.find(class_='phon').contents[3])
-        return transcription
-    except:
-        logging.info('Audio wasn\'t downloaded.')
-        return 'NOT FOUND!'
+    audio_source = soup.find(attrs={'title':' pronunciation American'}).attrs['data-src-mp3']
+    urllib.request.urlretrieve(audio_source, os.path.join(ANKI_MEDIA_PATH, word + '.mp3'))
+    transcription = str(soup.find(class_='phon').contents[3])
+    return transcription
 
 def download_page(url):
     headers = {}
@@ -145,62 +96,39 @@ def download_page(url):
     page_source = response.read().decode('utf-8')
     return page_source
 
-# This is the main program
 def main():
+    level = logging.INFO
+    format = '%(message)s'
+    handlers = [logging.FileHandler('vocabulary.log'), logging.StreamHandler()]
+    logging.basicConfig(level=level, format=format, handlers=handlers)
     t0 = time.time()
     try:
         file_path = os.path.abspath(sys.argv[1])
     except:
-        print('Missing arguments.')
+        logging.info('Missing argument...')
+        logging.info('Script is going to close.')
         sys.exit()
-    print('Openning browser...')
-    options = Options()
-    options.headless = True
-    browser = webdriver.Firefox(options=options)
     file_object = open(file_path)
     file_content = file_object.read()
-    list_words = file_content.split('\n')
-    file_object = open('vocabulary.csv', 'w', newline='', encoding='utf-8')
-    csv_writer_object = csv.writer(file_object)
-    for word in list_words:
-        print('Current word: ' + word)
-        logging.info('Current word: ' + word)
-        try:
-            page_source_vocabulary = download_page('https://www.vocabulary.com/dictionary/' + word)
-            page_source_oxford = download_page('https://www.oxfordlearnersdictionaries.com/definition/american_english/' + word)
-        except:
-            print(word + " wasn't found.")
-            continue
-        soup = BeautifulSoup(page_source_vocabulary, features='lxml')
-        print('Getting definitions...')
-        definitions = get_definition(word, soup)
-        print('Getting examples of use...')
-        examples = get_example(word, 4, browser)
-        print('Downloading pronounce...')
-        transcription = get_audio_and_transcription(word, page_source_oxford)
-        print('Downloading image...')
-        try:
-            get_image(word)
-        except:
-            logging.info('Problem downloading image.')
-        csv_writer_object.writerow([word,
-                                    definitions[0],
-                                    definitions[1],
-                                    definitions[2],
-                                    examples[0],
-                                    examples[1],
-                                    examples[2],
-                                    examples[3],
-                                    transcription,
-                                    '[sound:' + word + '.mp3' + ']',
-                                    '<img src=' + word + '.jpg>'])
-        print('\n')
     file_object.close()
-    browser.quit()
+    list_words = file_content.split('\n')
+    not_found_words = []
+    output = open('oxford.csv', 'w', newline='', encoding='utf-8')
+    csv_object = csv.writer(output)
+    for word in list_words:
+        logging.info('CURRENT WORD: ' + word)
+        try:
+            page_source = download_page('https://www.oxfordlearnersdictionaries.com/definition/american_english/' + word)
+            generate_notes(csv_object, page_source)
+        except:
+            not_found_words.append(word)
+            logging.info(word + " wasn't found.")
+            continue
+        logging.info('\n\n')
+    logging.info('Not found words:\n' + '\n'.join(not_found_words))
+    output.close()
     t1 = time.time()
-    print('Time: ' + str(round(t1 - t0, 0)) + ' seconds')
+    logging.info('Time: ' + str(round(t1 - t0, 0)) + ' seconds')
 
 if __name__ == "__main__":
-    oxford = download_page('https://www.oxfordlearnersdictionaries.com/definition/american_english/walk')
-    soup = BeautifulSoup(oxford, features='lxml')
-    oxford_definition(soup)
+    main()
